@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, AlertTriangle, CheckCircle2, Clock, Users } from 'lucide-react';
+import { Loader2, AlertTriangle, CheckCircle2, Clock, Mail as MailIcon } from 'lucide-react';
 import GlobalNav from '@/components/global-nav';
 
 interface ActionItem {
@@ -29,10 +29,17 @@ interface Risk {
   mentioned_by: string;
 }
 
-interface MeetingMetadata {
-  project_name: string;
+interface EmailMetadata {
+  subject: string;
+  from: string;
   date: string;
-  attendees: string[];
+  project_name: string;
+}
+
+interface StatusUpdate {
+  area: string;
+  status: string;
+  type: string;
 }
 
 interface ProjectHealth {
@@ -41,45 +48,55 @@ interface ProjectHealth {
 }
 
 interface AnalysisResult {
-  meeting_metadata: MeetingMetadata;
+  email_metadata: EmailMetadata;
   action_items: ActionItem[];
   decisions: Decision[];
   risks: Risk[];
   key_topics: string[];
+  status_updates: StatusUpdate[];
   project_health: ProjectHealth;
 }
 
-const SAMPLE_TRANSCRIPT = `Weekly Project Status - Enterprise Conference Room Buildout
+const SAMPLE_EMAIL = `Subject: RE: Conference Room Install - Equipment Delay Update
+From: Sarah Martinez (Project Manager)
 Date: November 12, 2024
-Attendees: Sarah (PM), Mark (Client), James (AV Tech)
+To: Mark Davidson (Client), Team
 
-Sarah: "Quick update - we're on track for the November 30th install date. Equipment arrived yesterday except for the Crestron processor."
+Hi Mark,
 
-Mark: "Wait, what? I thought everything was here. When's the processor coming?"
+Quick update on the Enterprise Conference Room project.
 
-Sarah: "Supplier says December 5th now. Supply chain issue. We can work around it temporarily but means we won't have full automation until early December."
+Good news: Most equipment arrived yesterday and is staged for the November 30th installation. The team has completed the pre-wire and mounting brackets are in place.
 
-Mark: "That's a problem. We have the board meeting December 3rd and promised them the new system would be live."
+However, we've hit a snag with the Crestron processor. Our supplier just notified me that it's delayed until December 5th due to a supply chain issue at the manufacturer. This affects our ability to deliver full system automation by your December 3rd board meeting.
 
-James: "I can probably rig a basic control system as a stopgap, but it won't be pretty."
+OPTIONS:
+1. We can rig a temporary basic control system (James estimates 1 day of work)
+2. Wait for the Crestron and reschedule the board meeting demo
+3. Expedite shipping (checking if possible, may incur additional cost)
 
-Sarah: "Let me escalate with the supplier and see if we can expedite. I'll also loop in our account manager to discuss options. Mark, can you give me 48 hours before we decide on the workaround?"
+I'm escalating this with our account manager and the supplier today to see if we can expedite. I'll have a concrete recommendation and cost estimate for you by Friday EOD.
 
-Mark: "Fine. But I need a concrete plan by Friday."
+Please let me know if you have a strong preference on approach, otherwise I'll move forward with Option 1 as backup while we pursue expediting.
 
-Sarah: "Noted. James, can you map out what the temporary setup would look like - just in case?"
+Thanks,
+Sarah
 
-James: "Yeah, I'll have something by Thursday."`;
+--
+Sarah Martinez
+Senior Project Manager
+AVI-SPL
+sarah.martinez@avispl.com`;
 
-function MeetingAnalyzerContent() {
-  const [transcript, setTranscript] = useState('');
+function EmailAnalyzerContent() {
+  const [emailText, setEmailText] = useState('');
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleAnalyze = async () => {
-    if (!transcript.trim()) {
-      setError('Please enter a meeting transcript');
+    if (!emailText.trim()) {
+      setError('Please enter an email to analyze');
       return;
     }
 
@@ -88,16 +105,16 @@ function MeetingAnalyzerContent() {
     setAnalysis(null);
 
     try {
-      const response = await fetch('/api/analyze-meeting', {
+      const response = await fetch('/api/analyze-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ transcript }),
+        body: JSON.stringify({ emailText }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to analyze meeting');
+        throw new Error('Failed to analyze email');
       }
 
       const result = await response.json();
@@ -109,8 +126,8 @@ function MeetingAnalyzerContent() {
     }
   };
 
-  const loadSampleTranscript = () => {
-    setTranscript(SAMPLE_TRANSCRIPT);
+  const loadSampleEmail = () => {
+    setEmailText(SAMPLE_EMAIL);
     setAnalysis(null);
     setError(null);
   };
@@ -141,37 +158,52 @@ function MeetingAnalyzerContent() {
     }
   };
 
+  const getUpdateTypeColor = (type: string) => {
+    switch (type) {
+      case 'Blocker':
+      case 'Delay':
+        return 'bg-red-100 text-red-800';
+      case 'Progress':
+        return 'bg-green-100 text-green-800';
+      case 'Resource Issue':
+      case 'Budget':
+        return 'bg-yellow-100 text-yellow-800';
+      default:
+        return 'bg-blue-100 text-blue-800';
+    }
+  };
+
   return (
     <>
       <GlobalNav />
       <div className="container mx-auto py-8 px-4 max-w-7xl">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">Meeting Intelligence</h1>
+          <h1 className="text-4xl font-bold mb-2">Email Intelligence</h1>
           <p className="text-muted-foreground">
-            Paste a meeting transcript to automatically extract action items, risks, and decisions
+            Paste project-related emails to automatically extract status updates, action items, and risks
           </p>
         </div>
 
         <div className="grid gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Meeting Transcript</CardTitle>
+              <CardTitle>Email Content</CardTitle>
               <CardDescription>
-                Paste your meeting transcript or notes below
+                Paste the email content or forward project status emails
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <Textarea
-                placeholder="Paste meeting transcript here..."
-                value={transcript}
-                onChange={(e) => setTranscript(e.target.value)}
+                placeholder="Paste email content here..."
+                value={emailText}
+                onChange={(e) => setEmailText(e.target.value)}
                 rows={12}
                 className="font-mono text-sm"
               />
               <div className="flex gap-2">
                 <Button
                   onClick={handleAnalyze}
-                  disabled={loading || !transcript.trim()}
+                  disabled={loading || !emailText.trim()}
                   className="flex-1"
                 >
                   {loading ? (
@@ -180,10 +212,13 @@ function MeetingAnalyzerContent() {
                       Analyzing...
                     </>
                   ) : (
-                    'Analyze Meeting'
+                    <>
+                      <MailIcon className="mr-2 h-4 w-4" />
+                      Analyze Email
+                    </>
                   )}
                 </Button>
-                <Button variant="outline" onClick={loadSampleTranscript}>
+                <Button variant="outline" onClick={loadSampleEmail}>
                   Load Sample
                 </Button>
               </div>
@@ -212,26 +247,32 @@ function MeetingAnalyzerContent() {
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Users className="h-5 w-5" />
-                    Meeting Details
+                    <MailIcon className="h-5 w-5" />
+                    Email Details
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
+                    {analysis.email_metadata.subject !== 'Not specified' && (
+                      <div>
+                        <span className="font-semibold">Subject: </span>
+                        {analysis.email_metadata.subject}
+                      </div>
+                    )}
+                    {analysis.email_metadata.from !== 'Not specified' && (
+                      <div>
+                        <span className="font-semibold">From: </span>
+                        {analysis.email_metadata.from}
+                      </div>
+                    )}
                     <div>
                       <span className="font-semibold">Project: </span>
-                      {analysis.meeting_metadata.project_name}
+                      {analysis.email_metadata.project_name}
                     </div>
                     <div>
                       <span className="font-semibold">Date: </span>
-                      {analysis.meeting_metadata.date}
+                      {analysis.email_metadata.date}
                     </div>
-                    {analysis.meeting_metadata.attendees.length > 0 && (
-                      <div>
-                        <span className="font-semibold">Attendees: </span>
-                        {analysis.meeting_metadata.attendees.join(', ')}
-                      </div>
-                    )}
                     {analysis.key_topics.length > 0 && (
                       <div>
                         <span className="font-semibold">Key Topics: </span>
@@ -247,6 +288,32 @@ function MeetingAnalyzerContent() {
                   </div>
                 </CardContent>
               </Card>
+
+              {analysis.status_updates && analysis.status_updates.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Status Updates</CardTitle>
+                    <CardDescription>
+                      {analysis.status_updates.length} update(s) identified
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {analysis.status_updates.map((update, idx) => (
+                        <div key={idx} className="border-l-2 border-blue-500 pl-3 space-y-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm font-medium">{update.area}</p>
+                            <Badge variant="outline" className={getUpdateTypeColor(update.type)}>
+                              {update.type}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground">{update.status}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               <div className="grid md:grid-cols-3 gap-6">
                 <Card>
@@ -356,10 +423,10 @@ function MeetingAnalyzerContent() {
   );
 }
 
-export default function MeetingAnalyzerPage() {
+export default function EmailAnalyzerPage() {
   return (
     <ProtectedRoute>
-      <MeetingAnalyzerContent />
+      <EmailAnalyzerContent />
     </ProtectedRoute>
   );
 }
